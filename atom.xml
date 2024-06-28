@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <id>https://lris0102.github.io</id>
+    <title>lris🍀</title>
+    <updated>2024-06-28T07:23:51.543Z</updated>
+    <generator>https://github.com/jpmonette/feed</generator>
+    <link rel="alternate" href="https://lris0102.github.io"/>
+    <link rel="self" href="https://lris0102.github.io/atom.xml"/>
+    <subtitle>温故而知新</subtitle>
+    <logo>https://lris0102.github.io/images/avatar.png</logo>
+    <icon>https://lris0102.github.io/favicon.ico</icon>
+    <rights>All rights reserved 2024, lris🍀</rights>
+    <entry>
+        <title type="html"><![CDATA[Go程序中调用Shell命令：引发的安全问题思考]]></title>
+        <id>https://lris0102.github.io/post/shell-command-safety/</id>
+        <link href="https://lris0102.github.io/post/shell-command-safety/">
+        </link>
+        <updated>2018-12-11T16:00:00.000Z</updated>
+    </entry>
+</feed>
