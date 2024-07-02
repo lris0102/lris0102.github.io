@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" >
+
+<title>Go程序中调用Shell命令：引发的安全问题思考 | lris🍀</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous">
+<link rel="shortcut icon" href="https://lris0102.github.io/favicon.ico?v=1719911063243">
+<link rel="stylesheet" href="https://lris0102.github.io/styles/main.css">
+
+
+  
+    <link rel="stylesheet" href="https://unpkg.com/gitalk/dist/gitalk.css" />
+  
+
+  
+
+
+<link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+
+
+
+    <meta name="description" content="
+
+Go程序中调用shell命令安全吗？
+在实际项目中，因业务功能的原因在编写程序中经常会调用第三方命令或系统命令来完成相应的功能，不由在想这种方式真的安全吗？
+由于这种疑问让我产生了浓烈的兴趣，本次将分析的经过记录了下来。接下来小伙伴们跟..." />
+    <meta name="keywords" content="go,shell" />
+  </head>
+  <body>
+    <div id="app" class="main">
+
+      <div class="sidebar" :class="{ 'full-height': menuVisible }">
+  <div class="top-container" data-aos="fade-right">
+    <div class="top-header-container">
+      <a class="site-title-container" href="https://lris0102.github.io">
+        <img src="https://lris0102.github.io/images/avatar.png?v=1719911063243" class="site-logo">
+        <h1 class="site-title">lris🍀</h1>
+      </a>
+      <div class="menu-btn" @click="menuVisible = !menuVisible">
+        <div class="line"></div>
+      </div>
+    </div>
+    <div>
+      
+        
+          <a href="/" class="site-nav">
+            首页
+          </a>
+        
+      
+        
+          <a href="/archives" class="site-nav">
+            目录
+          </a>
+        
+      
+        
+          <a href="/tags" class="site-nav">
+            标签
+          </a>
+        
+      
+        
+          <a href="/post/about" class="site-nav">
+            关于
+          </a>
+        
+      
+    </div>
+  </div>
+  <div class="bottom-container" data-aos="flip-up" data-aos-offset="0">
+    <div class="social-container">
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    </div>
+    <div class="site-description">
+      亢龙有悔
+    </div>
+    <div class="site-footer">
+      Powered by <a href="https://github.com/lris0102" target="_blank"> lris🍀</a> | <a class="rss" href="https://lris0102.github.io/atom.xml" target="_blank">RSS</a>
+    </div>
+  </div>
+</div>
+
+
+      <div class="main-container">
+        <div class="content-container" data-aos="fade-up">
+          <div class="post-detail">
+            <h2 class="post-title">Go程序中调用Shell命令：引发的安全问题思考</h2>
+            <div class="post-date">2018-12-12</div>
+            
+            <div class="post-content" v-pre>
+              <!-- more -->
+<!-- more -->
+<h1 id="go程序中调用shell命令安全吗">Go程序中调用shell命令安全吗？</h1>
+<p>在实际项目中，因业务功能的原因在编写程序中经常会调用第三方命令或系统命令来完成相应的功能，不由在想这种方式真的安全吗？</p>
+<p>由于这种疑问让我产生了浓烈的兴趣，本次将分析的经过记录了下来。接下来小伙伴们跟我一起研究学习吧~</p>
+<p>首先，下面代码块中使用了Go语言的 exec.Command 的函数进行执行 zip 命令压缩本地文件。其中 -rP 参数代表递归压缩并进行加密，密码abcd1234</p>
+<figure data-type="image" tabindex="1"><img src="https://lris0102.github.io/post-images/1719902397753.png" alt="pic1" loading="lazy"></figure>
+<p>很大部分场景中，在做业务功能时有很多类似的做法。例如进行执行加密、解密过程、获取系统某些信息等，习惯性调用系统命令。为了演示，在执行 zip 命令之前，加了命令sleep 60 等待，只是为了让大家更好的看到效果。<br>
+下面通过go build进行编译，接着让编译后的命令运行起来。</p>
+<pre><code class="language-shell">$ go build -o zipcommand main.go
+$ ./zipcommand
+</code></pre>
+<h2 id="用户态层面">用户态层面</h2>
+<p>接触过Linux的小伙伴肯定首先想到使用 ps 命令来看进程的上下文信息。</p>
+<figure data-type="image" tabindex="2"><img src="https://lris0102.github.io/post-images/1719556671793.png" alt="pic2" loading="lazy"></figure>
+<p>图中，先将zipcommand进程PID找到，然后使用pstree将该进程树打印，发现go中 exec.Command 函数在调用shell命令时会fork()一个子进程执行。 将第一个子进程 3648095 展开COMMAND时，发现shell与我们在go代码中传入shell命令是一致的，这样就将命令裸露到系统层面上了。 图中第二个子进程 3648096 是因为使用了 &amp;&amp; 拼接符，又利用fork()子进程方式先执行 sleep 后在执行 zip 命令。<br>
+还可以通过 /proc/pid/cmdline 方式读取 COMMAND 进程启动命令。</p>
+<p>注：这里大家可以详细查看linux进程fork()机制的材料，有助于加深理解。golang封装的 exec.Command 这种方式最终也是操作系统的系统调用真正在做处理。</p>
+<h2 id="系统调用层面">系统调用层面</h2>
+<p>下面我在想，现在已经知道程序中调用shell命令会暴露在系统层面，那程序在 exec.Command() 传入shell命令后会被篡改吗？<br>
+大概思路是使用ptrace()系统调用方式，先拿到程序中传入的shell命令变量内存地址，进行尝试修改变量值。</p>
+<p>上面go程序中的内存地址不能与c语言直接处理，下面举例先全部使用c语言代码演示。</p>
+<p>代码中将 cmd 内存地址直接输出，让ptrace()尝试修改内存地址，达到篡改进程调用的目的。通过 gcc cmd.c -o zipcommand 进行编译。</p>
+<figure data-type="image" tabindex="3"><img src="https://lris0102.github.io/post-images/1719556697960.png" alt="pic3" loading="lazy"></figure>
+<p>下面将zipcommand命令运行，然后拿到cmd变量的内存地址。<br>
+ptrace程序关键代码</p>
+<figure data-type="image" tabindex="4"><img src="https://lris0102.github.io/post-images/1719556732949.png" alt="pic4" loading="lazy"></figure>
+<p>主要是通过系统调用ptrace()方法，先attach到指定进程上，在基于拿到的内存地址，进行修改后让进程继续运行。</p>
+<p>本次所用到ptrace()的类型如下：<br>
+PTRACE_ATTACH是ptrace()中attach到一个指定的进程，使其成为当前进程跟踪的子进程。<br>
+PTRACE_PEEKDATA向内存区域中写入一个WORD，内存地址为addr。<br>
+PTRACE_DETACH进程在每次系统调用之后暂停。</p>
+<p>通过 gcc ptrace.c -o ptrace 进行编译。 下面尝试使用ptrace对zipcommand变量内存地址尝试篡改。</p>
+<p>我们可以看到 zipcommand 中的cmd变量值已经被篡改成功。<br>
+ptrace.c详细代码</p>
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;sys/ptrace.h&gt;
+#include &lt;sys/wait.h&gt;
+#include &lt;unistd.h&gt;
+#include &lt;sys/reg.h&gt;
+#include &lt;sys/syscall.h&gt;
+
+int main(int argc, char* argv[])
+{
+    pid_t attack_pid;
+ char cmd[] = &quot;echo helloword&quot;;
+ if(argc != 2) {
+        printf(&quot;Usage: %s &lt;pid to be traced&gt;
+&quot;,
+               argv[0]);
+        exit(1);
+    }
+    attack_pid = atoi(argv[1]);
+    if (ptrace(PTRACE_ATTACH, attack_pid, NULL, NULL) &lt; 0)
+ {
+  printf(&quot;attach failed
+&quot;);
+  return 0;
+ }
+ //读数据
+ printf(&quot;stack_arg %d
+&quot;, ptrace(PTRACE_PEEKDATA , attack_pid, (void*)0x7ffc41334450, NULL));
+    //修改数据
+ putdata(attack_pid, (void*)0x7ffc41334450, cmd, 44);
+ ptrace(PTRACE_DETACH, attack_pid, NULL, NULL);
+ waitpid(attack_pid, NULL, WUNTRACED);
+ return 0;
+}
+
+void putdata(pid_t child, long addr, char *str, int len) {
+ char *laddr;
+ int long_size = sizeof(long);
+ int i, j;
+ union u {
+  long val;
+  char chars[long_size];
+ } data;
+
+ i = 0;
+ j = len / long_size;
+ laddr = str;
+
+ while (i &lt; j) {
+  memcpy(data.chars, laddr, long_size);
+  //每次写入一个字
+  ptrace(PTRACE_POKEDATA, child, addr + i * 8, data.val);
+  ++i;
+  laddr += long_size;
+ }
+ j = len % long_size;
+ if (j != 0) {
+  memcpy(data.chars, laddr, j);
+  ptrace(PTRACE_POKEDATA, child, addr + i * 8, data.val);
+ }
+}
+</code></pre>
+<p>上面通过两个层面，说明了在程序中调用shell命令的面临的风险。 为了让程序更加安全，应减少采用调用shell命令这种方式。</p>
+
+            </div>
+            
+              <div class="tag-container">
+                
+                  <a href="https://lris0102.github.io/tag/ZR9D9xJ9E/" class="tag">
+                    go
+                  </a>
+                
+                  <a href="https://lris0102.github.io/tag/uZ8meMWbH9/" class="tag">
+                    shell
+                  </a>
+                
+              </div>
+            
+            
+
+            
+              
+                <div id="gitalk-container" data-aos="fade-in"></div>
+              
+
+              
+            
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+<script type="application/javascript">
+
+AOS.init();
+
+var app = new Vue({
+  el: '#app',
+  data: {
+    menuVisible: false,
+  },
+})
+
+</script>
+
+
+  <script src="//cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.5.1/build/highlight.min.js"></script>
+  <script>
+    hljs.initHighlightingOnLoad()
+  </script>
+
+
+
+
+  
+    <script src="https://unpkg.com/gitalk/dist/gitalk.min.js"></script>
+    <script>
+
+      var gitalk = new Gitalk({
+        clientID: 'Ov23lirrjrM4GXk4eeXD',
+        clientSecret: '30daa1e52075efdb4b4fb9c711c3e1e8e299528f',
+        repo: 'lris0102.github.io',
+        owner: 'lris0102',
+        admin: ['lris0102'],
+        id: (location.pathname).substring(0, 49),      // Ensure uniqueness and length less than 50
+        distractionFreeMode: false  // Facebook-like distraction free mode
+      })
+
+      gitalk.render('gitalk-container')
+
+    </script>
+  
+
+  
+
+
+
+
+  </body>
+</html>
